@@ -1,15 +1,13 @@
 {
   "name": "Userbot Controller",
   "description": "Telegram Userbot Controller with high-speed VC IP extraction.",
-  "keywords": ["telegram", "userbot", "vcip", "pyrogram"],
   "env": {
-    "TELEGRAM_API_ID": { "description": "Your API ID from my.telegram.org", "required": true },
-    "TELEGRAM_API_HASH": { "description": "Your API Hash from my.telegram.org", "required": true },
-    "MAIN_BOT_TOKEN": { "description": "Your Bot Token from @BotFather", "required": true },
-    "OWNER_ID": { "description": "Your Telegram User ID", "required": true }
+    "TELEGRAM_API_ID": { "required": true },
+    "TELEGRAM_API_HASH": { "required": true },
+    "MAIN_BOT_TOKEN": { "required": true },
+    "OWNER_ID": { "required": true },
+    "STRING_SESSION": { "required": false }
   },
-  "formation": {
-    "worker": { "quantity": 1, "size": "basic" }
-  },
+  "formation": { "worker": { "quantity": 1, "size": "basic" } },
   "buildpacks": [{ "url": "heroku/python" }]
 }
