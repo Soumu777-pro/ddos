@@ -11,7 +11,7 @@
 ### 🚀 Quick Deployment
 Click the button below to deploy this bot on Heroku in one click!
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/Soumu777-pro/ddos/tree/main)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/Soumu777-pro/ddos)
 
 ---
 
