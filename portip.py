@@ -98,33 +98,6 @@ async def help_cmd(client, message):
     """
     await message.reply(help_text)
 
-@bot.on_message(filters.command("addsession") & filters.user(OWNER_ID))
-async def add_session_cmd(client, message):
-    try:
-        if len(message.command) < 2:
-            return await message.reply("Usage: `/addsession {string_session}`")
-        session_str = message.text.split(" ", 1)[1]
-        
-        temp_client = Client(name="temp", api_id=API_ID, api_hash=API_HASH, session_string=session_str, in_memory=True)
-        await temp_client.start()
-        me = await temp_client.get_me()
-        add_session(me.phone or "Unknown", session_str, me.id, me.username)
-        await temp_client.stop()
-        
-        await message.reply(f"✅ Added account: {me.first_name} (@{me.username})")
-        await start_userbots()
-    except Exception as e:
-        await message.reply(f"❌ Error: {e}")
-
-@bot.on_message(filters.command("sessions") & filters.user(OWNER_ID))
-async def list_sessions_cmd(client, message):
-    sessions = get_sessions()
-    if not sessions: return await message.reply("No sessions found.")
-    resp = "**Active Sessions:**\n"
-    for s in sessions:
-        resp += f"ID: `{s[0]}` | {s[1]} (@{s[4]})\n"
-    await message.reply(resp)
-
 @bot.on_message(filters.command("vcip") & filters.user(OWNER_ID))
 async def vcip_cmd(client, message):
     if len(message.command) < 2: return await message.reply("Usage: `/vcip {link}`")
@@ -139,7 +112,7 @@ async def vcip_cmd(client, message):
         peer = await u_client.resolve_peer(chat.id)
         
         # Get full chat info to find call
-        if chat.type == enums.ChatType.CHANNEL:
+        if chat.type in [enums.ChatType.CHANNEL, enums.ChatType.SUPERGROUP]:
             full_chat = await u_client.invoke(functions.channels.GetFullChannel(channel=peer))
         else:
             full_chat = await u_client.invoke(functions.messages.GetFullChat(chat_id=peer.chat_id))
@@ -183,16 +156,6 @@ async def join_cmd(client, message):
             success += 1
         except: pass
     await message.reply(f"✅ Joined {success} accounts.")
-
-@bot.on_message(filters.command("leave") & filters.user(OWNER_ID))
-async def leave_cmd(client, message):
-    if len(message.command) < 2: return await message.reply("Usage: `/leave {link}`")
-    link = message.command[1]
-    for u_client in user_clients.values():
-        try:
-            await u_client.leave_chat(link)
-        except: pass
-    await message.reply("✅ Accounts left.")
 
 async def main():
     print("Starting bot...")
