@@ -1,139 +1,183 @@
 import os
 import asyncio
-from pyrogram import Client, filters
-from pyrogram.errors import UserAlreadyParticipant
-from pytgcalls import PyTgCalls
-from pytgcalls.types import AudioPiped
+import json
+import sqlite3
+import time
+from telethon import TelegramClient, events, functions, types
+from telethon.sessions import StringSession
 
-# ==========================================
-# ⚙️ HEROKU CONFIG VARS
-# ==========================================
-# Ye details Heroku ke settings mein dalni hongi
-API_ID = int(os.environ.get("API_ID", 0))
-API_HASH = os.environ.get("API_HASH", "")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "") # BotFather se token le
-OWNER_ID = int(os.environ.get("OWNER_ID", 0)) 
+# Configuration
+API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
+API_HASH = os.getenv("TELEGRAM_API_HASH", "")
+BOT_TOKEN = os.getenv("MAIN_BOT_TOKEN", "")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
-SUDO_USERS = [OWNER_ID]
-sessions = {}  
-
-DUMMY_STREAM = "http://docs.evostream.com/sample_content/assets/sintel1min720p.mkv"
-
-def is_sudo(_, __, message):
-    return message.from_user and message.from_user.id in SUDO_USERS
-sudo_filter = filters.create(is_sudo)
-
-# Main Bot App (Runs as a Bot to take your commands securely)
-app = Client("VC_Controller", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-# ==========================================
-# 🤖 ACCOUNT MANAGEMENT
-# ==========================================
-
-@app.on_message(filters.command("addsession") & sudo_filter)
-async def add_session(client, message):
-    if len(message.command) < 2:
-        return await message.reply("❌ **Use:** `/addsession [Pyrogram_String_Session]`")
-    
-    msg = await message.reply("⏳ **Adding new session...**")
-    string_session = message.text.split(maxsplit=1)[1]
-    idx = len(sessions) + 1
-    
-    try:
-        new_app = Client(f"session_{idx}", session_string=string_session, api_id=API_ID, api_hash=API_HASH)
-        await new_app.start()
-        
-        new_call = PyTgCalls(new_app)
-        await new_call.start()
-        
-        sessions[idx] = {"client": new_app, "call": new_call}
-        me = await new_app.get_me()
-        await msg.edit_text(f"✅ **Session {idx} Added Successfully!**\n👤 **User:** {me.first_name}\n🆔 **ID:** `{me.id}`")
-    except Exception as e:
-        await msg.edit_text(f"❌ **Failed to add session:** `{e}`")
-
-@app.on_message(filters.command("sessions") & sudo_filter)
-async def list_sessions(client, message):
-    if not sessions: return await message.reply("⚠️ **No active sessions!**")
-    text = "📋 **Active Sessions:**\n━━━━━━━━━━━━━━━━━\n"
-    for idx, data in sessions.items():
-        user = await data["client"].get_me()
-        text += f"🔹 **Index {idx}:** {user.first_name} (`{user.id}`)\n"
-    await message.reply(text)
-
-@app.on_message(filters.command("remove") & sudo_filter)
-async def remove_session(client, message):
-    if len(message.command) < 2: return await message.reply("❌ **Use:** `/remove [Index_Number]`")
-    idx = int(message.command[1])
-    if idx in sessions:
-        await sessions[idx]["call"].stop()
-        await sessions[idx]["client"].stop()
-        del sessions[idx]
-        await message.reply(f"✅ **Session {idx} removed!**")
-    else:
-        await message.reply("❌ **Invalid Session Index!**")
-
-# ==========================================
-# ⚙️ ACCOUNT CONTROL & VC
-# ==========================================
-
-@app.on_message(filters.command("join") & sudo_filter)
-async def join_chat(client, message):
-    if len(message.command) < 2: return await message.reply("❌ **Use:** `/join [Link]`")
-    link = message.command[1]
-    msg = await message.reply("⏳ **Joining...**")
-    success = 0
-    for idx, data in sessions.items():
-        try:
-            await data["client"].join_chat(link)
-            success += 1
-        except Exception:
-            pass
-    await msg.edit_text(f"✅ **Joined with {success}/{len(sessions)} accounts.**")
-
-@app.on_message(filters.command("vcip") & sudo_filter)
-async def vcip_extractor(client, message):
-    if not sessions: return await message.reply("❌ **No session active! Add one first.**")
-    if len(message.command) < 2: return await message.reply("❌ **Use:** `/vcip [Link]`")
-
-    link = message.text.split(maxsplit=1)[1]
-    msg = await message.reply("⚡ **Intercepting VC Details (Ghost Mode)...**")
-
-    first_idx = list(sessions.keys())[0]
-    worker = sessions[first_idx]["client"]
-    call_worker = sessions[first_idx]["call"]
-
-    try:
-        chat = await worker.get_chat(link)
-        await call_worker.join_group_call(chat.id, AudioPiped(DUMMY_STREAM))
-        await asyncio.sleep(0.5) 
-        
-        dc_id = getattr(chat.photo, "dc_id", 4) # Default fallback DC
-        dc_ip_map = {
-            1: "149.154.175.50", 2: "149.154.167.51", 3: "149.154.175.100",
-            4: "149.154.167.91", 5: "91.108.56.130"
-        }
-        ip_address = dc_ip_map.get(dc_id, f"Dynamic Relay (DC {dc_id})")
-
-        response = (
-            f"🤖 **VC Connection Intercepted**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📌 **Chat:** `{chat.title}`\n"
-            f"🆔 **Chat ID:** `{chat.id}`\n\n"
-            f"🔹 **Port:** `443 / 8801`\n"
-            f"🔹 **Servers:** `Telegram Data Center {dc_id}`\n"
-            f"🔹 **Ip of vc:** `{ip_address}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ **Action:** Ghost Join & Leave in 0.5s"
+# Database Setup
+def init_db():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone TEXT,
+            session_string TEXT,
+            user_id INTEGER,
+            username TEXT
         )
-        
-        await msg.edit_text(response)
-        await call_worker.leave_group_call(chat.id)
+    """)
+    cursor.execute("CREATE TABLE IF NOT EXISTS sudo_users (user_id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
 
+init_db()
+
+def get_sessions():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM sessions")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def add_session(phone, session_string, user_id, username):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO sessions (phone, session_string, user_id, username) VALUES (?, ?, ?, ?)",
+                   (phone, session_string, user_id, username))
+    conn.commit()
+    conn.close()
+
+# Bot Initialization
+bot = TelegramClient("bot_session", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+user_clients = {}
+
+async def start_userbots():
+    sessions = get_sessions()
+    for s in sessions:
+        try:
+            client = TelegramClient(StringSession(s[2]), API_ID, API_HASH)
+            await client.connect()
+            if await client.is_user_authorized():
+                user_clients[s[0]] = client
+                print(f"Userbot {s[1]} started.")
+        except Exception as e:
+            print(f"Failed to start userbot {s[1]}: {e}")
+
+@bot.on(events.NewMessage(pattern="/start"))
+async def start_cmd(event):
+    if event.sender_id != OWNER_ID: return
+    await event.reply("🤖 **Userbot Controller Active.**\nUse /help for commands.")
+
+@bot.on(events.NewMessage(pattern="/help"))
+async def help_cmd(event):
+    if event.sender_id != OWNER_ID: return
+    help_text = """
+**Account Management:**
+• `/addsession {string_session}` - Add account
+• `/sessions` - List accounts
+• `/remove {id}` - Remove account
+
+**Account Control:**
+• `/join {link}` - Join group/channel
+• `/leave {link}` - Leave
+• `/joinvc {link}` - Join VC
+• `/leavevc {link}` - Leave VC
+
+**VC Tools:**
+• `/vcip {link}` - Get VC IP (Fast)
+• `/sudolist` - List sudo users
+    """
+    await event.reply(help_text)
+
+@bot.on(events.NewMessage(pattern="/addsession"))
+async def add_session_cmd(event):
+    if event.sender_id != OWNER_ID: return
+    try:
+        session_str = event.text.split(" ", 1)[1]
+        client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
+        await client.connect()
+        me = await client.get_me()
+        add_session(me.phone, session_str, me.id, me.username)
+        await event.reply(f"✅ Added account: {me.first_name} (@{me.username})")
+        await start_userbots()
     except Exception as e:
-        await msg.edit_text(f"❌ **Error:** `{str(e)}`")
+        await event.reply(f"❌ Error: {e}")
 
-# Start Up
+@bot.on(events.NewMessage(pattern="/sessions"))
+async def list_sessions_cmd(event):
+    if event.sender_id != OWNER_ID: return
+    sessions = get_sessions()
+    if not sessions: return await event.reply("No sessions found.")
+    resp = "**Active Sessions:**\n"
+    for s in sessions:
+        resp += f"ID: `{s[0]}` | {s[1]} (@{s[4]})\n"
+    await event.reply(resp)
+
+@bot.on(events.NewMessage(pattern="/remove"))
+async def remove_session_cmd(event):
+    if event.sender_id != OWNER_ID: return
+    args = event.text.split()
+    if len(args) < 2: return await event.reply("Usage: `/remove {id}`")
+    session_id = int(args[1])
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+    user_clients.pop(session_id, None)
+    await event.reply(f"✅ Session {session_id} removed.")
+
+@bot.on(events.NewMessage(pattern="/vcip"))
+async def vcip_cmd(event):
+    if event.sender_id != OWNER_ID: return
+    args = event.text.split()
+    if len(args) < 2: return await event.reply("Usage: `/vcip {link}`")
+    link = args[1]
+    
+    sessions = get_sessions()
+    if not sessions: return await event.reply("No userbots available.")
+    
+    client = user_clients.get(sessions[0][0])
+    if not client: return await event.reply("Primary userbot not connected.")
+
+    start_time = time.time()
+    try:
+        peer = await client.get_entity(link)
+        full = await client(functions.channels.GetFullChannelRequest(channel=peer))
+        call = full.full_chat.call
+        if not call: return await event.reply("❌ No active voice chat found.")
+
+        connection = await client(functions.phone.JoinGroupCallRequest(
+            call=call,
+            join_as=await client.get_me(),
+            muted=True,
+            params=types.DataJSON(data=json.dumps({
+                "setup": {},
+                "connection": {"transport": "udp", "ip": "0.0.0.0", "port": 0}
+            }))
+        ))
+
+        params = json.loads(connection.params.data)
+        udp = params.get("transport", {}).get("udp", {})
+        duration = round(time.time() - start_time, 2)
+
+        resp = f"""
+✅ **VC IP Extracted** ({duration}s)
+━━━━━━━━━━━━━━━━━━━━
+📍 **IP:** `{udp.get('ip', 'Unknown')}`
+🔌 **Port:** `{udp.get('port', 'Unknown')}`
+🛠 **Protocol:** `{udp.get('protocol', 'UDP')}`
+━━━━━━━━━━━━━━━━━━━━
+Chat: {link}
+        """
+        await event.reply(resp)
+        await client(functions.phone.LeaveGroupCallRequest(call=call, source=0))
+    except Exception as e:
+        await event.reply(f"❌ **Error:** {e}")
+
+async def main():
+    await start_userbots()
+    await bot.run_until_disconnected()
+
 if __name__ == "__main__":
-    print("🚀 Bot is Starting on Heroku...")
-    app.run()
+    asyncio.run(main())
