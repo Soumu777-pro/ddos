@@ -1,0 +1,16 @@
+pyrogram==2.0.106
+tgcrypto
+pytgcalls==3.0.0.dev24
+
+aiofiles
+aiohttp
+dnspython
+ffmpeg-python
+httpx[http2]==0.25.2
+motor
+psutil
+python-dotenv
+requests
+uvloop; sys_platform != "win32"
+yt-dlp
+youtube-search-python
